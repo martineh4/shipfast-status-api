@@ -1,0 +1,18 @@
+# Guardrail: applications in this project may only deploy from this repo,
+# only into status-api-* namespaces, and may not create cluster-scoped objects
+# other than their own Namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shipfast-status
+  namespace: argocd
+spec:
+  description: ShipFast internal status-check API
+  sourceRepos:
+    - https://github.com/martineh4/shipfast-status-api.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: status-api-*
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: status-api-dev
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: status-api-config
+    literals:
+      - APP_ENV=dev
+
+# Updated by the release workflow via pull request -- do not edit by hand on main.
+images:
+  - name: ghcr.io/martineh4/shipfast-status-api
+    newTag: sha-0000000

@@ -1,0 +1,126 @@
+# Pull-request gate. All three jobs are required status checks on `main`.
+#
+#   test       unit tests for the API
+#   manifests  render Kustomize + schema-validate every Kubernetes/Argo CD object
+#   e2e        ephemeral kind cluster -> install Argo CD -> let Argo CD sync THIS
+#              commit -> call the API -> prove self-heal reverts manual drift
+#
+# workflow_dispatch exists so the release workflow can run these checks on the
+# image-bump PRs it opens (PRs opened with GITHUB_TOKEN don't trigger pull_request).
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Unit tests
+        working-directory: app
+        run: python -m unittest -v
+
+  manifests:
+    runs-on: ubuntu-latest
+    env:
+      KUBECONFORM_VERSION: v0.8.0
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install kubeconform
+        run: |
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - name: Validate rendered dev overlay
+        run: kubectl kustomize deploy/overlays/dev | kubeconform -strict -summary -
+      - name: Validate Argo CD resources
+        run: |
+          kubeconform -strict -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            argocd/
+
+  e2e:
+    needs: [test, manifests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_IMAGE: status-api:e2e
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REVISION }}
+
+      - name: Build image
+        run: |
+          docker build -t "$E2E_IMAGE" \
+            --build-arg APP_VERSION=e2e \
+            --build-arg GIT_COMMIT="$REVISION" .
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: e2e
+
+      - name: Load image into kind
+        run: kind load docker-image "$E2E_IMAGE" --name e2e
+
+      - name: Install Argo CD
+        run: ./scripts/bootstrap-argocd.sh --install-only
+
+      - name: Register Application pinned to this commit
+        # Same Application manifest as the real cluster, with two overrides:
+        # track this exact commit, and use the image built above.
+        run: |
+          kubectl apply -f argocd/project.yaml
+          yq '.spec.source.targetRevision = strenv(REVISION)
+              | .spec.source.kustomize.images = ["ghcr.io/martineh4/shipfast-status-api=" + strenv(E2E_IMAGE)]' \
+            argocd/status-api-dev.yaml | tee /dev/stderr | kubectl apply -f -
+
+      - name: Wait for Argo CD to sync and report Healthy
+        run: |
+          kubectl -n argocd wait application/status-api-dev \
+            --for=jsonpath='{.status.sync.status}'=Synced --timeout=300s
+          kubectl -n argocd wait application/status-api-dev \
+            --for=jsonpath='{.status.health.status}'=Healthy --timeout=300s
+          kubectl -n status-api-dev get deploy,svc,pods -o wide
+
+      - name: Smoke test the API through its Service
+        run: |
+          body=$(kubectl -n status-api-dev run smoke --image=curlimages/curl --restart=Never --rm -i --quiet \
+            -- curl -sSf http://status-api/status)
+          echo "$body" | jq .
+          echo "$body" | jq -e --arg rev "$REVISION" '.status == "ok" and .environment == "dev" and .commit == $rev'
+
+      - name: Prove self-heal reverts manual kubectl drift
+        run: |
+          kubectl -n status-api-dev scale deploy/status-api --replicas=0
+          for i in $(seq 1 90); do
+            replicas=$(kubectl -n status-api-dev get deploy/status-api -o jsonpath='{.spec.replicas}')
+            if [ "$replicas" = "2" ]; then echo "Argo CD restored replicas=2 after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          echo "Argo CD did not revert drift within 90s"; exit 1
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl -n argocd get application status-api-dev -o yaml || true
+          kubectl -n status-api-dev get all,events || true
+          kubectl -n argocd logs deploy/argocd-repo-server --tail=100 || true
+          kubectl -n argocd logs statefulset/argocd-application-controller --tail=100 || true

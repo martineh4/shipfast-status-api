@@ -1,0 +1,31 @@
+# Argo CD watches deploy/overlays/dev on main and reconciles the cluster to it.
+#  - automated.prune:    resources deleted from git are deleted from the cluster
+#  - automated.selfHeal: manual `kubectl edit/scale/delete` drift is reverted
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: status-api-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: shipfast-status
+  source:
+    repoURL: https://github.com/martineh4/shipfast-status-api.git
+    targetRevision: main
+    path: deploy/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: status-api-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
