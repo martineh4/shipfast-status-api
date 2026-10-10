@@ -5,8 +5,10 @@
 #   e2e        ephemeral kind cluster -> install Argo CD -> let Argo CD sync THIS
 #              commit -> call the API -> prove self-heal reverts manual drift
 #
-# workflow_dispatch exists so the release workflow can run these checks on the
-# image-bump PRs it opens (PRs opened with GITHUB_TOKEN don't trigger pull_request).
+# Deploy PRs opened by github-actions[bot] may wait for a maintainer to click
+# "Approve and run workflows" before these checks start (GitHub's contributor
+# approval policy). workflow_dispatch is for manual re-runs only: its results
+# don't count toward a PR's required checks.
 name: ci
 
 on:
