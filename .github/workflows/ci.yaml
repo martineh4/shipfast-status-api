@@ -5,8 +5,10 @@
 #   e2e        ephemeral kind cluster -> install Argo CD -> let Argo CD sync THIS
 #              commit -> call the API -> prove self-heal reverts manual drift
 #
-# workflow_dispatch exists so the release workflow can run these checks on the
-# image-bump PRs it opens (PRs opened with GITHUB_TOKEN don't trigger pull_request).
+# Deploy PRs opened by github-actions[bot] may wait for a maintainer to click
+# "Approve and run workflows" before these checks start (GitHub's contributor
+# approval policy). workflow_dispatch is for manual re-runs only: its results
+# don't count toward a PR's required checks.
 name: ci
 
 on:
@@ -102,8 +104,9 @@ jobs:
 
       - name: Smoke test the API through its Service
         run: |
-          body=$(kubectl -n status-api-dev run smoke --image=curlimages/curl --restart=Never --rm -i --quiet \
-            -- curl -sSf http://status-api/status)
+          kubectl -n status-api-dev rollout status deploy/status-api --timeout=120s
+          kubectl -n status-api-dev port-forward svc/status-api 8080:80 >/dev/null 2>&1 &
+          body=$(curl -sSf --retry 15 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/status)
           echo "$body" | jq .
           echo "$body" | jq -e --arg rev "$REVISION" '.status == "ok" and .environment == "dev" and .commit == $rev'
 

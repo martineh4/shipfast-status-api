@@ -23,7 +23,7 @@ ShipFast Logistics Technology's internal status-check API. It's a small referenc
 
 1. **Code change.** Open a PR. CI runs three required checks (described below). Merge when they're green.
 2. **Image build.** When code under `app/` or the `Dockerfile` lands on `main`, `release.yaml` builds the image and pushes it to `ghcr.io/martineh4/shipfast-status-api:sha-<short-sha>`. Tags are immutable commit SHAs, never `latest`.
-3. **Deploy PR.** The same workflow opens a PR that changes only the `newTag:` line in `deploy/overlays/dev/kustomization.yaml`. This PR is the deployment approval.
+3. **Deploy PR.** The same workflow opens a PR that changes only the `newTag:` line in `deploy/overlays/dev/kustomization.yaml`. This PR is the deployment approval. GitHub may hold CI on bot-opened PRs until a maintainer clicks **Approve and run workflows** on the PR (contributor approval policy). After that, the required checks run as usual.
 4. **Sync.** After the deploy PR merges, Argo CD detects the new commit on `main` (it polls every ~3 minutes by default) and rolls the Deployment out with zero downtime (`maxUnavailable: 0`).
 5. **Drift control.** The Application has `selfHeal: true` and `prune: true`. Manual `kubectl edit`, `scale`, or `delete` changes are reverted to what git says. Resources removed from git are removed from the cluster.
 
