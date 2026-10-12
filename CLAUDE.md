@@ -42,3 +42,4 @@ kubectl kustomize deploy/overlays/dev | kubeconform -strict -summary -
 
 - The local dev machine is Windows. Docker Desktop there currently has no Linux engine (WSL isn't installed), so image builds and kind clusters run in GitHub Actions. Don't assume `docker build` works locally.
 - Git Bash is available. Scripts in `scripts/` are bash and target CI runners and Linux/macOS shells.
+- In GitHub Codespaces, a stale iptables-legacy firewall drops traffic from kind's Docker network, so kind nodes can't pull images. `.devcontainer/devcontainer.json` runs `scripts/codespace-allow-docker-bridges.sh` on every start to fix this. Run it by hand if image pulls in kind time out with DNS errors.

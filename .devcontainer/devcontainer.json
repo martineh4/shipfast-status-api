@@ -1,0 +1,7 @@
+{
+  // Same image Codespaces uses when a repo has no devcontainer.json.
+  "name": "shipfast-status-api",
+  "image": "mcr.microsoft.com/devcontainers/universal:latest",
+  // Docker starts before this runs; see the script for why kind needs it.
+  "postStartCommand": "bash scripts/codespace-allow-docker-bridges.sh"
+}
