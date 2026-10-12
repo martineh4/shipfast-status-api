@@ -1,2 +1,3 @@
 *
 !app/status_api.py
+!app/test_status_api.py
