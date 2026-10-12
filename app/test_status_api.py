@@ -44,6 +44,7 @@ class StatusApiTest(unittest.TestCase):
         code, _, body = self.get("/status")
         self.assertEqual(code, 200)
         self.assertEqual(body["service"], "shipfast-status-api")
+        self.assertEqual(body["team"], "platform")
         self.assertEqual(body["version"], "1.2.3")
         self.assertEqual(body["commit"], "abc1234")
         self.assertEqual(body["environment"], "test")
