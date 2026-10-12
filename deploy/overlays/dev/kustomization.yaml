@@ -14,4 +14,4 @@ configMapGenerator:
 # Updated by the release workflow via pull request -- do not edit by hand on main.
 images:
   - name: ghcr.io/martineh4/shipfast-status-api
-    newTag: sha-579e788
+    newTag: sha-5855239
