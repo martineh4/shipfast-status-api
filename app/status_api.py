@@ -23,6 +23,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SERVICE_NAME = "shipfast-status-api"
+TEAM = "platform"
 STARTED_AT = time.time()
 
 log = logging.getLogger(SERVICE_NAME)
@@ -31,6 +32,7 @@ log = logging.getLogger(SERVICE_NAME)
 def build_status():
     return {
         "service": SERVICE_NAME,
+        "team": TEAM,
         "status": "ok",
         "version": os.environ.get("APP_VERSION", "dev"),
         "commit": os.environ.get("GIT_COMMIT", "unknown"),
